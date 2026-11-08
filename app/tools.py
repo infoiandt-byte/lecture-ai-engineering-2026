@@ -5,10 +5,13 @@
 """
 
 import json
+import random
+from datetime import datetime
 from functools import cache
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+LOG_DIR = Path(__file__).resolve().parent.parent / "learning_log"
 MAX_RESULTS = 3
 
 
@@ -77,3 +80,42 @@ def get_lecture_summary(lecture: int) -> str:
         available = sorted(p.stem for p in (DATA_DIR / "lectures").glob("*.md"))
         return f"第{lecture}回の要点はまだありません。用意されている回: {', '.join(available)}"
     return path.read_text(encoding="utf-8")
+
+def make_quiz(lecture: int) -> str:
+    """指定した回の用語から 1つを選び、確認問題と答えを返す。
+
+    「第2回の確認問題を出して」のように、復習用の問題を求められたときに使う。
+    """
+    terms = [term for term in load_glossary() if term["lecture"] == lecture]
+    if not terms:
+        return f"第{lecture}回の用語は用語集にありません。"
+
+    term = random.choice(terms)
+    return json.dumps(
+        {
+            "question": f"「{term['term']}」とは何ですか？",
+            "answer": term["definition"],
+        },
+        ensure_ascii=False,
+    )
+
+def save_learning_log(lecture: int, content: str) -> str:
+    """学習内容の記録・保存を頼まれたときに、指定した回と学習内容を保存する。
+
+    content には、用語集や講義要点を根拠に整理した学習メモを渡す。
+    承認確認はCLIが行うため、利用者が記録を依頼したら会話文で確認を求めず、このツールを呼び出す。
+    """
+    if not content.strip():
+        return "学習内容が空のため、記録を保存できません。"
+
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    recorded_at = datetime.now().astimezone()
+    path = LOG_DIR / f"{recorded_at:%Y%m%d_%H%M%S_%f}_lecture{lecture:02d}.json"
+    record = {
+        "lecture": lecture,
+        "content": content.strip(),
+        "recorded_at": recorded_at.isoformat(timespec="microseconds"),
+    }
+    path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    return f"第{lecture}回の学習記録を保存しました: {path.name}"
+

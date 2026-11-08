@@ -5,11 +5,13 @@ TestModel は実際のLLMを呼ばない偽モデルで、登録されたツー�
 「ツールが登録され、呼ばれ、結果がモデルに戻るか」を確かめられる。
 """
 
+import json
+
 from pydantic_ai import DeferredToolRequests
 from pydantic_ai.messages import ToolCallPart, ToolReturnPart
 from pydantic_ai.models.test import TestModel
 
-from app.agent import agent
+from app.agent import agent, request_tool_approvals
 
 BASE_TOOLS = {"search_glossary", "get_lecture_summary"}
 
@@ -40,3 +42,30 @@ def test_glossary_result_reaches_the_model():
         result = agent.run_sync("RAGとは？")
     returns = _parts(result, ToolReturnPart)
     assert returns and returns[0].tool_name == "search_glossary"
+
+
+def test_learning_log_waits_for_approval_then_resumes(tmp_path, monkeypatch):
+    from app import tools
+
+    monkeypatch.setattr(tools, "LOG_DIR", tmp_path)
+    pending = agent.run_sync(
+        "第3回の学習記録を保存して",
+        model=TestModel(call_tools=["save_learning_log"]),
+    )
+
+    assert isinstance(pending.output, DeferredToolRequests)
+    assert [call.tool_name for call in pending.output.approvals] == ["save_learning_log"]
+    assert not list(tmp_path.iterdir())
+
+    monkeypatch.setattr("builtins.input", lambda _: "残していいです")
+    deferred_results = request_tool_approvals(pending.output)
+    completed = agent.run_sync(
+        message_history=pending.all_messages(),
+        deferred_tool_results=deferred_results,
+        model=TestModel(call_tools=[]),
+    )
+
+    assert not isinstance(completed.output, DeferredToolRequests)
+    log_path = next(tmp_path.glob("*.json"))
+    log = json.loads(log_path.read_text(encoding="utf-8"))
+    assert log["content"].strip()

@@ -39,6 +39,20 @@ def test_lecture_summary():
     assert "まだありません" in tools.get_lecture_summary(99)
 
 
+def test_save_learning_log(tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "LOG_DIR", tmp_path)
+    content = "LoRAは低ランク行列だけを学習するPEFT手法。"
+
+    result = tools.save_learning_log(3, content)
+
+    assert "保存しました" in result
+    log_path = next(tmp_path.glob("*.json"))
+    log = json.loads(log_path.read_text(encoding="utf-8"))
+    assert log["lecture"] == 3
+    assert log["content"] == content
+    assert log["recorded_at"]
+
+
 def test_default_question_of_lecture1_is_answerable_from_glossary():
     """第1回の既定の質問（app.ask）は、第3回のエージェントが用語集で正しく答えられること。"""
     from app.ask import DEFAULT_QUESTION
