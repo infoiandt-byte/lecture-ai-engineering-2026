@@ -54,3 +54,27 @@ def test_existing_index_survives_failed_rebuild(materials):
         build_index(source, database, rebuild=True, embedder=embed)
     assert database.read_bytes() == before
     assert not list(database.parent.glob(".rag-build-*"))
+
+
+def test_add_surrounding_pages_stays_in_document_and_is_unique():
+    pages = {
+        "lec01-main": [
+            {"page_id": "lec01-main-p001", "document_id": "lec01-main", "title": "前"},
+            {"page_id": "lec01-main-p002", "document_id": "lec01-main", "title": "中央"},
+            {"page_id": "lec01-main-p003", "document_id": "lec01-main", "title": "次"},
+        ],
+        "lec02-main": [
+            {"page_id": "lec02-main-p001", "document_id": "lec02-main", "title": "別資料"},
+        ],
+    }
+    hit = {"page_id": "lec01-main-p002", "document_id": "lec01-main", "content": "本文"}
+    claimed = {"lec01-main-p002"}
+    result = retrieval.add_surrounding_pages(hit, pages, claimed)
+
+    assert [page["page_id"] for page in result["context_pages"]] == [
+        "lec01-main-p001",
+        "lec01-main-p003",
+    ]
+    assert result["previous_page"]["page_id"] == "lec01-main-p001"
+    assert result["next_page"]["page_id"] == "lec01-main-p003"
+    assert "lec02-main-p001" not in claimed

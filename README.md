@@ -40,9 +40,9 @@ uv run python -m app.ask "LoRAとは何ですか？"
 
 ```bash
 uv sync --frozen
-uv run python -m app.retrieval "LoRA QLoRA 違い"
-uv run python -m app.agent --trace "LoRAとQLoRAの違いは？"
-uv run python -m app.agent --graph --trace "LoRAとQLoRAの違いは？"
+uv run python -m app.retrieval "AIエージェントのハーネスとループの概念と意味は？"
+uv run python -m app.agent --trace "AIエージェントのハーネスとループの概念と意味は？"
+uv run python -m app.agent --graph --trace "AIエージェントのハーネスとループの概念と意味は？"
 ```
 
 教材本文や埋め込み設定を変更した場合は、実験用のDBを作ります。`AIE_RAG_DB` を設定したターミナルでは、作成と検索の両方がそのパスを使います。

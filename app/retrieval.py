@@ -92,6 +92,52 @@ def normalized_vector(values: list[float]) -> list[float]:
     return [value / norm for value in values]
 
 
+def add_surrounding_pages(
+    hit: dict,
+    pages_by_document: dict[str, list[dict]],
+    claimed_page_ids: set[str] | None = None,
+) -> dict:
+    """検索ページと同じ資料内の前後1ページを重複なく付ける。"""
+    document_pages = pages_by_document.get(hit["document_id"], [])
+    index = next(
+        (i for i, page in enumerate(document_pages) if page["page_id"] == hit["page_id"]),
+        None,
+    )
+    if index is None:
+        result = dict(hit)
+        result["context_pages"] = []
+        result["previous_page"] = None
+        result["next_page"] = None
+        return result
+
+    claimed = set(claimed_page_ids or ())
+    context = []
+    previous = None
+    following = None
+    for neighbor_index in (index - 1, index + 1):
+        if neighbor_index < 0 or neighbor_index >= len(document_pages):
+            continue
+        neighbor = document_pages[neighbor_index]
+        page_id = neighbor["page_id"]
+        if page_id in claimed or page_id == hit["page_id"]:
+            continue
+        context.append(neighbor)
+        claimed.add(page_id)
+        if neighbor_index == index - 1:
+            previous = neighbor
+        else:
+            following = neighbor
+
+    if claimed_page_ids is not None:
+        claimed_page_ids.update(claimed)
+
+    result = dict(hit)
+    result["context_pages"] = context
+    result["previous_page"] = previous
+    result["next_page"] = following
+    return result
+
+
 def embed_text(text: str, task_type: str) -> list[float]:
     """Geminiで文章を埋め込む。入力上限を超えた場合は切り捨てず停止する。"""
     with genai.Client(api_key=get_api_key()) as client:
@@ -125,7 +171,7 @@ def open_index(path: Path):
 
 
 def search(query: str) -> list[dict]:
-    """質問を埋め込み、近いページを最大RAG_TOP_K件返す。"""
+    """質問を埋め込み、近いページと同じ資料内の前後ページを最大RAG_TOP_K件返す。"""
     if not isinstance(query, str) or not query.strip():
         raise ValueError("検索語が空です。")
     with open_index(RAG_DB) as db:
@@ -135,7 +181,18 @@ def search(query: str) -> list[dict]:
                    vec_distance_cosine(embedding, ?) AS distance
             FROM chunks ORDER BY distance, page_id LIMIT ?
         """, (sqlite_vec.serialize_float32(vector), RAG_TOP_K))
-        return [dict(row) for row in rows]
+        hits = [dict(row) for row in rows]
+
+    pages = load_pages(RAG_SOURCE)
+    pages_by_document = defaultdict(list)
+    for page in pages:
+        pages_by_document[page["document_id"]].append(page)
+
+    claimed_page_ids = {hit["page_id"] for hit in hits}
+    return [
+        add_surrounding_pages(hit, pages_by_document, claimed_page_ids)
+        for hit in hits
+    ]
 
 
 def search_graph(query: str) -> dict:
@@ -209,3 +266,7 @@ if __name__ == "__main__":
         print(f"タイトル: {result['title']}")
         print(f"ページ: {result['page']}")
         print(f"\n{result['content']}")
+        for context in result.get("context_pages", []):
+            print(f"\n{'-' * 40}")
+            print(f"前後ページ: 第{context['lecture']}回・PDF p.{context['page']} / {context['title']}")
+            print(context["content"])

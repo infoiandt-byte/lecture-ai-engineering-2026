@@ -54,7 +54,7 @@ APIキーは第1回と同じ環境変数`GEMINI_API_KEY`を使います。Codesp
 まず、同じターミナルで比較用の質問を変数に入れます。以下の各方式では、この質問をそのまま使います。
 
 ```bash
-AIE_QUESTION='第2回の説明では、LoRAは何を固定し何を学習しますか？ QLoRAは何を加えますか？'
+AIE_QUESTION='AIエージェントのハーネスとループの概念と意味は？'
 uv run python -m app.agent --full-context --trace "$AIE_QUESTION"
 ```
 
